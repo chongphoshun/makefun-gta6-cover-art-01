@@ -1,8 +1,8 @@
 // Wires the editor: controls, panel picking and dragging, history, export,
 // and the ?shot= scenes screenshots use.
 import {
-  SIZES, GRADES, LAYOUTS, TITLES, SUBTITLES, defaultState, layoutById,
-  sizeById, History,
+  SIZES, GRADES, LAYOUTS, TITLES, SUBTITLES, CAPTION_MODES, FALLBACK_CAPTIONS,
+  defaultState, layoutById, sizeById, History,
 } from './state.js';
 import { drawCover, layoutPanels, renderToCanvas } from './cover.js';
 import { runShot } from './shots.js';
@@ -101,6 +101,7 @@ function syncChips() {
   });
   buildChips('gradeRow', GRADES, state.grade, (id) => { state.grade = id; commit(); }, (g) => g.swatch);
   buildChips('sizeRow', SIZES, state.size, (id) => { state.size = id; commit(); });
+  buildChips('captionRow', CAPTION_MODES, state.captions, (id) => { state.captions = id; commit(); });
 }
 
 function buildLibrary() {
@@ -126,12 +127,21 @@ function syncInputs() {
   document.getElementById('titleInput').value = state.title;
   document.getElementById('subtitleInput').value = state.subtitle;
   document.getElementById('quoteInput').value = state.quote;
+  document.getElementById('sourceInput').value = state.pressSource;
+  document.getElementById('taglineInput').value = state.tagline;
   document.getElementById('toggleGrain').checked = state.grain;
   document.getElementById('toggleVignette').checked = state.vignette;
   document.getElementById('togglePalms').checked = state.palms;
   document.getElementById('toggleBadge').checked = state.badge;
+  document.getElementById('toggleFurniture').checked = state.furniture;
+  document.getElementById('toggleHalftone').checked = state.halftone;
   document.getElementById('starsRange').value = String(state.stars);
   document.getElementById('zoomRange').value = String(panelSlot().zoom);
+  document.getElementById('strengthRange').value = String(state.strength);
+  document.getElementById('contrastRange').value = String(state.contrast);
+  document.getElementById('saturationRange').value = String(state.saturation);
+  document.getElementById('grainRange').value = String(state.grainAmt);
+  document.getElementById('vignetteRange').value = String(state.vignetteAmt);
   syncChips();
   buildLibrary();
   syncUndoRedo();
@@ -172,12 +182,30 @@ document.getElementById('quoteInput').addEventListener('input', (e) => {
   redraw();
 });
 document.getElementById('quoteInput').addEventListener('change', commit);
+document.getElementById('sourceInput').addEventListener('input', (e) => {
+  state.pressSource = e.target.value;
+  redraw();
+});
+document.getElementById('sourceInput').addEventListener('change', commit);
+document.getElementById('taglineInput').addEventListener('input', (e) => {
+  state.tagline = e.target.value;
+  redraw();
+});
+document.getElementById('taglineInput').addEventListener('change', commit);
 
-for (const [id, key] of [['toggleGrain', 'grain'], ['toggleVignette', 'vignette'], ['togglePalms', 'palms'], ['toggleBadge', 'badge']]) {
+for (const [id, key] of [['toggleGrain', 'grain'], ['toggleVignette', 'vignette'], ['togglePalms', 'palms'], ['toggleBadge', 'badge'], ['toggleFurniture', 'furniture'], ['toggleHalftone', 'halftone']]) {
   document.getElementById(id).addEventListener('change', (e) => {
     state[key] = e.target.checked;
     commit();
   });
+}
+// Grade sliders: live redraw while dragging, one history entry on release.
+for (const [id, key] of [['strengthRange', 'strength'], ['contrastRange', 'contrast'], ['saturationRange', 'saturation'], ['grainRange', 'grainAmt'], ['vignetteRange', 'vignetteAmt']]) {
+  document.getElementById(id).addEventListener('input', (e) => {
+    state[key] = Number(e.target.value);
+    redraw();
+  });
+  document.getElementById(id).addEventListener('change', commit);
 }
 document.getElementById('starsRange').addEventListener('input', (e) => {
   state.stars = Number(e.target.value);
@@ -199,6 +227,11 @@ document.getElementById('fillAllBtn').addEventListener('click', () => {
   for (const p of state.panels) p.photo = photo;
   commit();
 });
+document.getElementById('spreadBtn').addEventListener('click', () => {
+  const n = state.photos.length;
+  state.panels.forEach((p, i) => { p.photo = (state.selected + i) % n; });
+  commit();
+});
 
 document.getElementById('uploadInput').addEventListener('change', async (e) => {
   const files = [...e.target.files];
@@ -207,7 +240,8 @@ document.getElementById('uploadInput').addEventListener('change', async (e) => {
     const url = URL.createObjectURL(f);
     try {
       const img = await loadImage(url);
-      state.photos.push({ name: f.name, src: url, img, objectUrl: url });
+      const cap = FALLBACK_CAPTIONS[(state.photos.length - 4 + FALLBACK_CAPTIONS.length) % FALLBACK_CAPTIONS.length];
+      state.photos.push({ name: f.name, src: url, img, objectUrl: url, ...cap });
     } catch { /* unreadable file: skip it */ }
   }
   if (files.length) {
@@ -242,6 +276,7 @@ document.getElementById('surpriseBtn').addEventListener('click', () => {
   state.grade = pick(GRADES).id;
   state.title = pick(TITLES);
   state.subtitle = pick(SUBTITLES);
+  state.captions = pick(CAPTION_MODES).id;
   state.stars = 3 + Math.floor(Math.random() * 3);
   const order = state.photos.map((_, i) => i).sort(() => Math.random() - 0.5);
   state.panels.forEach((p, i) => {

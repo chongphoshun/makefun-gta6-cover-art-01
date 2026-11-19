@@ -44,6 +44,22 @@ export const GRADES = [
     ground: ['rgba(255,122,26,0)', 'rgba(255,122,26,0.5)'],
     deep: 'rgba(74,36,8,0.20)', glow: 'rgba(255,233,168,0.18)', ink: '#3a1c05',
   },
+  {
+    id: 'ink', name: 'Comic Ink',
+    swatch: 'linear-gradient(135deg,#fff3d6,#ff2e88)',
+    wash: 'rgba(255,46,136,0.16)', sky: ['rgba(255,243,214,0.5)', 'rgba(255,243,214,0)'],
+    ground: ['rgba(255,46,136,0)', 'rgba(255,46,136,0.45)'],
+    deep: 'rgba(20,4,32,0.30)', glow: 'rgba(255,243,214,0.10)', ink: '#14042a',
+    filter: 'contrast(1.28) saturate(0.72)', inkBoost: true,
+  },
+  {
+    id: 'punch', name: 'Sunset Punch',
+    swatch: 'linear-gradient(135deg,#ff5e00,#ff2e88)',
+    wash: 'rgba(255,94,0,0.26)', sky: ['rgba(255,120,40,0.6)', 'rgba(255,120,40,0)'],
+    ground: ['rgba(255,46,136,0)', 'rgba(255,46,136,0.6)'],
+    deep: 'rgba(64,8,48,0.22)', glow: 'rgba(255,190,90,0.2)', ink: '#2a0a2e',
+    filter: 'contrast(1.1) saturate(1.35)',
+  },
 ];
 
 const GAP = 0.012; // panel gap, fraction of the shorter side
@@ -150,41 +166,84 @@ export const LAYOUTS = [
     },
     title: (W, H) => titleBand(W, H),
   },
+  {
+    id: 'cast', name: 'Whole Cast', panels: 7,
+    rects(W, H) {
+      const a = artArea(W, H); const g = Math.min(W, H) * GAP;
+      const heroW = a.w * 0.4 - g / 2;
+      const rx = a.x + heroW + g;
+      const rw = a.w - heroW - g;
+      const cw = (rw - g) / 2; const ch = (a.h - 2 * g) / 3;
+      const out = [{ x: a.x, y: a.y, w: heroW, h: a.h, rot: 0 }];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
+        out.push({ x: rx + c * (cw + g), y: a.y + r * (ch + g), w: cw, h: ch, rot: 0 });
+      }
+      return out;
+    },
+    title: (W, H) => titleBand(W, H),
+  },
 ];
 
 export const TITLES = [
   'NEON SHORE', 'NIGHT SHIFT', 'PIER PRESSURE', 'BOULEVARD QUEEN', 'SUNSET HEIST',
   'VICE HEAT', 'GOLDEN HOUR', 'PALM SHADOWS', 'HEATWAVE NIGHTS', 'DOWNTOWN VICE',
-  'LAST JOB', 'OCEAN DRIVE',
+  'LAST JOB', 'OCEAN DRIVE', 'SUNSET STATE', 'COASTLINE NIGHTS', 'VICE HORIZON',
 ];
 export const SUBTITLES = [
   'Neon Shore Nights', 'One last job under the palms', 'Golden hour getaway',
   'The city never sleeps', 'Chasing the sunset', 'Palms, neon and trouble',
-  'Every sunset has a price', 'Heat rises after dark',
+  'Every sunset has a price', 'Heat rises after dark', 'Neon Tide',
+  'Six nights in paradise', 'Boardwalk Nights', 'Miami Sunset',
 ];
 
+// Every library photo carries its own scene caption (place + time + flavor
+// line) and a character label, the way GTA key art names each panel.
 export const LIBRARY = [
-  { name: 'Boulevard', src: 'samples/boulevard.jpg' },
-  { name: 'Rooftop', src: 'samples/rooftop.jpg' },
-  { name: 'Neon Street', src: 'samples/neon.jpg' },
-  { name: 'Pier', src: 'samples/pier.jpg' },
+  { name: 'Boulevard', src: 'samples/boulevard.jpg', place: 'OCEAN DRIVE', time: '6:42 PM', flavor: 'LOOKING FOR TROUBLE', character: 'THE DRIVER' },
+  { name: 'Rooftop', src: 'samples/rooftop.jpg', place: 'SUNSET HEIGHTS', time: '8:30 PM', flavor: 'BIG MONEY', character: 'THE CLOSER' },
+  { name: 'Neon Street', src: 'samples/neon.jpg', place: 'INTERSTATE 6', time: '11:58 PM', flavor: 'FULL THROTTLE', character: 'THE FIXER' },
+  { name: 'Pier', src: 'samples/pier.jpg', place: 'PIER 26', time: '5:30 AM', flavor: 'GONE FISHING', character: 'THE ANGLER' },
+];
+
+// Captions for uploaded photos, cycled in order.
+export const FALLBACK_CAPTIONS = [
+  { place: 'MARINA DEL SOL', time: '7:48 PM', flavor: 'NO WITNESSES', character: 'THE WITNESS' },
+  { place: 'PALM BOULEVARD', time: '9:15 PM', flavor: 'LIGHTS OUT', character: 'THE LOOKOUT' },
+  { place: 'TOWER 2', time: '6:10 PM', flavor: 'LAST SWIM', character: 'THE LIFEGUARD' },
+  { place: 'CORAL CAUSEWAY', time: '7:15 PM', flavor: 'GOLDEN HOUR', character: 'THE RUNNER' },
+];
+
+export const CAPTION_MODES = [
+  { id: 'scene', name: 'Scene captions' },
+  { id: 'character', name: 'Character labels' },
+  { id: 'off', name: 'Captions off' },
 ];
 
 export function defaultState() {
   return {
-    layout: 'hero3',
+    layout: 'cast',
     grade: 'sunset',
     size: 'square',
-    title: 'VICE HEAT',
-    subtitle: 'Neon Shore Nights',
-    quote: 'One last job under the palms.',
+    title: 'SUNSET STATE',
+    subtitle: 'Neon Tide',
+    quote: 'PURE SUNSET CHAOS',
+    pressSource: 'VICE DAILY',
+    tagline: 'ONE COAST · NO RULES · COMING SOON',
     grain: true,
     vignette: true,
     palms: true,
     badge: true,
-    stars: 4,
+    furniture: true,
+    captions: 'scene',
+    strength: 1,
+    contrast: 1,
+    saturation: 1,
+    grainAmt: 0.3,
+    vignetteAmt: 1,
+    halftone: false,
+    stars: 5,
     selected: 0,
-    photos: LIBRARY.map((p) => ({ name: p.name, src: p.src, img: null, objectUrl: null })),
+    photos: LIBRARY.map((p) => ({ ...p, img: null, objectUrl: null })),
     // Nine panel slots; each layout uses the first N. photo = index into photos.
     panels: Array.from({ length: 9 }, (_, i) => ({ photo: i % 4, zoom: 1, ox: 0, oy: 0 })),
   };

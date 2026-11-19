@@ -24,7 +24,7 @@ export function drawCover(canvas, state, opts = {}) {
   // Panels.
   const visible = rects.filter((r) => !r.hidden).slice(0, layoutById(state.layout).panels);
   for (const rect of visible) {
-    drawPanel(ctx, rect, state, grade, W, H);
+    drawPanel(ctx, rect, state, grade, W, H, title.y);
   }
 
   // Palm band along the bottom of the art area.
@@ -40,6 +40,14 @@ export function drawCover(canvas, state, opts = {}) {
   if (title.band) drawKeyArtTitle(ctx, title, state, grade, W, H);
   else if (title.overArt) drawOverArtTitle(ctx, title, state, grade, W, H);
   else drawTitleBand(ctx, title, state, grade, W, H);
+
+  // Poster furniture on top of everything: starburst seal in the art's
+  // top-right corner (clear of captions, press strip and title), VOL pill
+  // in the art's top-left corner.
+  if (state.furniture) {
+    if (state.badge) drawSeal(ctx, W * 0.90, H * 0.09, Math.min(W, H) * 0.08, 'EST.', '2026');
+    drawVolPill(ctx, W * 0.022, H * 0.018, 'VOL. 06', Math.max(14, W * 0.018));
+  }
 
   // Selected-panel outline (editor only).
   if (opts.selected != null && visible[opts.selected]) {
@@ -57,10 +65,18 @@ export function drawCover(canvas, state, opts = {}) {
     ctx.restore();
   }
 
+  // Halftone print dots over the whole cover.
+  if (state.halftone) {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    drawHalftone(ctx, 0, 0, W, H, '#ff2e88');
+    ctx.restore();
+  }
+
   // Grain and vignette.
   if (state.grain) {
     ctx.save();
-    ctx.globalAlpha = 0.07;
+    ctx.globalAlpha = 0.04 + 0.10 * (state.grainAmt ?? 0.3);
     ctx.globalCompositeOperation = 'overlay';
     const tile = grainTile();
     ctx.fillStyle = ctx.createPattern(tile, 'repeat');
@@ -70,7 +86,7 @@ export function drawCover(canvas, state, opts = {}) {
   if (state.vignette) {
     const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.max(W, H) * 0.75);
     v.addColorStop(0, 'rgba(0,0,0,0)');
-    v.addColorStop(1, 'rgba(5,0,15,0.42)');
+    v.addColorStop(1, `rgba(5,0,15,${0.42 * (state.vignetteAmt ?? 1)})`);
     ctx.fillStyle = v;
     ctx.fillRect(0, 0, W, H);
   }
@@ -101,7 +117,7 @@ function panelPath(ctx, rect) {
   }
 }
 
-function drawPanel(ctx, rect, state, grade, W, H) {
+function drawPanel(ctx, rect, state, grade, W, H, artBottom) {
   const slot = state.panels[rect.index] ?? { photo: 0, zoom: 1, ox: 0, oy: 0 };
   const photo = state.photos[slot.photo] ?? state.photos[0];
   // Local rect for rotated panels (drawn in a frame turned about the centre).
@@ -122,16 +138,34 @@ function drawPanel(ctx, rect, state, grade, W, H) {
   frame((r) => {
     panelPath(ctx, r);
     ctx.clip();
-    if (photo && photo.img) drawPhotoCover(ctx, photo.img, r, slot.zoom, slot.ox, slot.oy);
-    else {
+    if (photo && photo.img) {
+      const filt = [];
+      if (grade.filter) filt.push(grade.filter);
+      const c = state.contrast ?? 1; const s = state.saturation ?? 1;
+      if (c !== 1) filt.push(`contrast(${c})`);
+      if (s !== 1) filt.push(`saturate(${s})`);
+      if (filt.length) ctx.filter = filt.join(' ');
+      drawPhotoCover(ctx, photo.img, r, slot.zoom, slot.ox, slot.oy);
+      ctx.filter = 'none';
+    } else {
       const g = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
       g.addColorStop(0, '#3a1450');
       g.addColorStop(1, '#160a26');
       ctx.fillStyle = g;
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
-    applyGrade(ctx, r, grade);
+    applyGrade(ctx, r, grade, state);
   });
+
+  // Scene caption / character label, clipped to the panel shape.
+  if (state.captions && state.captions !== 'off') {
+    frame((r) => {
+      panelPath(ctx, r);
+      ctx.clip();
+      const lift = state.palms && Math.abs((r.y + r.h) - artBottom) < 2 ? r.h * 0.22 + 8 : 0;
+      drawCaptionChip(ctx, r, photo, state.captions, lift);
+    });
+  }
 
   // Inked panel border (+ a white snapshot frame for tilted panels).
   frame((r) => {
@@ -169,30 +203,45 @@ function drawPhotoCover(ctx, img, rect, zoom, ox, oy) {
   ctx.drawImage(img, rect.x + (rect.w - pw) / 2 + cx * rect.w, rect.y + (rect.h - ph) / 2 + cy * rect.h, pw, ph);
 }
 
-/** The grade: a soft-light wash, sky and ground gradients, deep shadows, glow. */
-function applyGrade(ctx, rect, grade) {
+/** The grade: a soft-light wash, sky and ground gradients, deep shadows, glow.
+ *  `strength` re-runs the overlay passes: above 1 it paints a second pass at
+ *  the remainder, so a strong grade really punches. */
+function applyGrade(ctx, rect, grade, state = {}) {
   const { x, y, w, h } = rect;
+  const strength = state.strength ?? 1;
+  const passes = strength > 1 ? [1, strength - 1] : [strength];
   ctx.save();
-  ctx.globalCompositeOperation = 'soft-light';
-  ctx.fillStyle = grade.wash;
-  ctx.fillRect(x, y, w, h);
-  ctx.globalCompositeOperation = 'overlay';
-  let g = ctx.createLinearGradient(0, y, 0, y + h * 0.55);
-  g.addColorStop(0, grade.sky[0]);
-  g.addColorStop(1, grade.sky[1]);
-  ctx.fillStyle = g;
-  ctx.fillRect(x, y, w, h * 0.55);
-  g = ctx.createLinearGradient(0, y + h * 0.45, 0, y + h);
-  g.addColorStop(0, grade.ground[0]);
-  g.addColorStop(1, grade.ground[1]);
-  ctx.fillStyle = g;
-  ctx.fillRect(x, y + h * 0.45, w, h * 0.55);
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = grade.deep;
-  ctx.fillRect(x, y, w, h);
-  ctx.globalCompositeOperation = 'screen';
-  ctx.fillStyle = grade.glow;
-  ctx.fillRect(x, y, w, h * 0.3);
+  for (const a of passes) {
+    ctx.globalAlpha = a;
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.fillStyle = grade.wash;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalCompositeOperation = 'overlay';
+    let g = ctx.createLinearGradient(0, y, 0, y + h * 0.55);
+    g.addColorStop(0, grade.sky[0]);
+    g.addColorStop(1, grade.sky[1]);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h * 0.55);
+    g = ctx.createLinearGradient(0, y + h * 0.45, 0, y + h);
+    g.addColorStop(0, grade.ground[0]);
+    g.addColorStop(1, grade.ground[1]);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y + h * 0.45, w, h * 0.55);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = grade.deep;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = grade.glow;
+    ctx.fillRect(x, y, w, h * 0.3);
+  }
+  // Comic Ink: harden the panel edge so the art reads as printed ink.
+  if (grade.inkBoost) {
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(16,4,32,0.55)';
+    ctx.lineWidth = Math.max(2, w * 0.012);
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  }
   ctx.restore();
 }
 
@@ -241,7 +290,8 @@ function drawSubtitle(ctx, text, cx, y, size, maxW) {
   return s;
 }
 
-/** The bottom title band: halftone, skyline, sun, title, subtitle, quote, stars. */
+/** The bottom title band: press-quote strip, halftone, skyline, sun, title,
+ *  subtitle, then a footer strip with palms, tagline, barcode and credits. */
 function drawTitleBand(ctx, band, state, grade, W, H) {
   const { x, y, w, h } = band;
   ctx.save();
@@ -258,32 +308,208 @@ function drawTitleBand(ctx, band, state, grade, W, H) {
   ctx.save();
   ctx.globalAlpha = 0.35;
   ctx.globalCompositeOperation = 'screen';
-  drawSun(ctx, x + w * 0.85, y + h * 0.28, h * 0.34, '#ffb347', '#ff2e88');
+  drawSun(ctx, x + w * 0.85, y + h * 0.34, h * 0.34, '#ffb347', '#ff2e88');
   ctx.restore();
   ctx.save();
   ctx.globalAlpha = 0.9;
-  drawSkyline(ctx, x, y + h * 0.62, w, h * 0.38, '#0d0518');
+  drawSkyline(ctx, x, y + h * 0.58, w, h * 0.22, '#0d0518');
   ctx.restore();
   drawHalftone(ctx, x, y, w, h, '#ff2e88');
 
   const cx = x + w / 2;
-  const titleSize = drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.52, h * 0.52, state.badge ? w * 0.66 : w * 0.86);
-  if (state.subtitle.trim()) {
-    drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.78, h * 0.17, w * 0.7);
+  // Press-quote strip: stars + quote + source, a hero element, not a footnote.
+  if (state.quote && state.quote.trim()) {
+    drawPressStrip(ctx, cx, y + h * 0.10, h * 0.085, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
   }
-  if (state.quote.trim()) {
-    let qs = Math.max(11, h * 0.075);
-    ctx.font = `${qs}px system-ui, sans-serif`;
-    while (qs > 8 && ctx.measureText(state.quote.trim().toUpperCase()).width > w * 0.55) {
-      qs -= 1;
-      ctx.font = `${qs}px system-ui, sans-serif`;
+  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.54, h * 0.44, w * 0.86);
+  if (state.subtitle.trim()) {
+    drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.76, h * 0.15, w * 0.7);
+  }
+  drawFooterStrip(ctx, x, y + h * 0.83, w, h * 0.17, state, W, H);
+  ctx.restore();
+}
+
+/** Stars + quoted line + source, centered on one line when it fits. */
+function drawPressStrip(ctx, cx, y, size, quote, source, maxW, stars) {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  const starTxt = '★'.repeat(Math.max(0, stars)) + '☆'.repeat(Math.max(0, 5 - stars));
+  const line = `"${quote.toUpperCase()}"${source ? ` — ${source.toUpperCase()}` : ''}`;
+  let s = size;
+  ctx.font = `700 ${s}px system-ui, sans-serif`;
+  while (s > 9 && ctx.measureText(starTxt + '  ' + line).width > maxW) {
+    s -= 1;
+    ctx.font = `700 ${s}px system-ui, sans-serif`;
+  }
+  const total = ctx.measureText(starTxt + '  ' + line).width;
+  let lx = cx - total / 2;
+  ctx.fillStyle = '#ffc46b';
+  ctx.textAlign = 'left';
+  ctx.fillText(starTxt, lx, y);
+  lx += ctx.measureText(starTxt + '  ').width;
+  ctx.fillStyle = '#f4eefc';
+  ctx.fillText(line, lx, y);
+  ctx.restore();
+}
+
+/** Footer strip: palm silhouettes, tagline, barcode and credit fine print. */
+function drawFooterStrip(ctx, x, y, w, h, state, W, H) {
+  ctx.save();
+  // Palm silhouettes along the bottom edge.
+  ctx.globalAlpha = 0.9;
+  drawPalmBand(ctx, x, y + h, w, h * 0.5, 'rgba(10, 4, 24, 0.95)');
+  ctx.globalAlpha = 1;
+  // Tagline, centered.
+  if (state.tagline && state.tagline.trim()) {
+    let ts = Math.max(10, h * 0.34);
+    ctx.font = `700 ${ts}px system-ui, sans-serif`;
+    while (ts > 8 && ctx.measureText(state.tagline.trim().toUpperCase()).width > w * 0.62) {
+      ts -= 1;
+      ctx.font = `700 ${ts}px system-ui, sans-serif`;
     }
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#cfc4e0';
-    ctx.fillText(state.quote.trim().toUpperCase(), cx, y + h * 0.94);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#ffe9a8';
+    ctx.fillText(state.tagline.trim().toUpperCase(), x + w / 2, y + h * 0.44);
   }
-  if (state.stars > 0) drawStars(ctx, x + w * 0.06, y + h * 0.9, h * 0.085, state.stars);
-  if (state.badge) drawBadge(ctx, x + w - w * 0.16, y + h * 0.08, w * 0.13, h * 0.3, 'PALM STATE');
+  // Credit fine print, bottom edge.
+  ctx.font = `${Math.max(7, h * 0.13)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(207, 196, 224, 0.75)';
+  ctx.fillText(
+    'VICE HEAT · A VICE HEAT COVER STUDIO PICTURE · STARRING YOU · SHOT ON YOUR OWN CAMERA · CAT. VH-2026',
+    x + w / 2, y + h * 0.90,
+  );
+  // Barcode, bottom-right.
+  if (state.furniture) drawBarcode(ctx, x + w - w * 0.085, y + h * 0.06, w * 0.062, h * 0.52);
+  ctx.restore();
+}
+
+/** A fake-but-plausible barcode: deterministic bars from a fixed seed. */
+function drawBarcode(ctx, x, y, w, h) {
+  ctx.save();
+  ctx.fillStyle = '#f4eefc';
+  ctx.fillRect(x - 3, y - 3, w + 6, h + 12);
+  ctx.fillStyle = '#14092b';
+  let seed = 11;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  let bx = x;
+  while (bx < x + w - 2) {
+    const bw = 1 + Math.floor(rnd() * 3) * (w / 90);
+    if (rnd() > 0.45) ctx.fillRect(bx, y, bw, h);
+    bx += bw + (w / 90);
+  }
+  ctx.font = `${Math.max(7, h * 0.14)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('0 2026 0626', x + w / 2, y + h + 9);
+  ctx.restore();
+}
+
+/** Starburst seal with two lines of text, e.g. EST. / 2026. */
+function drawSeal(ctx, cx, cy, r, line1, line2) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-0.1);
+  // Spiky starburst.
+  ctx.beginPath();
+  const spikes = 14;
+  for (let i = 0; i <= spikes * 2; i++) {
+    const a = (i / (spikes * 2)) * Math.PI * 2;
+    const rr = i % 2 === 0 ? r : r * 0.82;
+    const px = Math.cos(a) * rr; const py = Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#ffc46b';
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, r * 0.05);
+  ctx.strokeStyle = '#14092b';
+  ctx.stroke();
+  // Inner disc.
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff2e88';
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 ${r * 0.24}px system-ui, sans-serif`;
+  ctx.fillText(line1, 0, -r * 0.14);
+  ctx.font = `700 ${r * 0.3}px system-ui, sans-serif`;
+  ctx.fillText(line2, 0, r * 0.2);
+  ctx.restore();
+}
+
+/** Small VOL. pill for the art's top-left corner. */
+function drawVolPill(ctx, x, y, text, size) {
+  ctx.save();
+  ctx.font = `700 ${size}px system-ui, sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const padX = size * 0.9; const h = size * 1.9;
+  ctx.fillStyle = '#ffc46b';
+  ctx.beginPath();
+  ctx.roundRect(x, y, tw + padX * 2, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = '#14092b';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + (tw + padX * 2) / 2, y + h / 2 + 1);
+  ctx.restore();
+}
+
+/** One panel's caption chip: scene (place + time · flavor) or character label.
+ *  `lift` raises the chip above the palm band on bottom-row panels. */
+function drawCaptionChip(ctx, rect, photo, mode, lift = 0) {
+  if (!photo) return;
+  const pad = Math.max(8, rect.w * 0.02);
+  const x = rect.x + pad;
+  const y = rect.y + rect.h - pad - lift;
+  ctx.save();
+  ctx.textBaseline = 'alphabetic';
+  if (mode === 'character' && photo.character) {
+    const label = photo.character;
+    let s = Math.max(11, rect.w * 0.055);
+    ctx.font = `700 ${s}px system-ui, sans-serif`;
+    while (s > 9 && ctx.measureText(label).width > rect.w * 0.62) {
+      s -= 1;
+      ctx.font = `700 ${s}px system-ui, sans-serif`;
+    }
+    const tw = ctx.measureText(label).width;
+    const bh = s * 1.9;
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(x, y - bh, tw + pad * 1.6, bh, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, x + pad * 0.8, y - bh * 0.32);
+  } else if (photo.place) {
+    const place = photo.place;
+    const sub = [photo.time, photo.flavor].filter(Boolean).join(' · ');
+    let s = Math.max(11, rect.w * 0.052);
+    ctx.font = `700 ${s}px system-ui, sans-serif`;
+    while (s > 9 && ctx.measureText(place).width > rect.w * 0.8) {
+      s -= 1;
+      ctx.font = `700 ${s}px system-ui, sans-serif`;
+    }
+    const s2 = Math.max(8, s * 0.58);
+    ctx.font = `${s2}px system-ui, sans-serif`;
+    const subW = ctx.measureText(sub).width;
+    ctx.font = `700 ${s}px system-ui, sans-serif`;
+    const tw = Math.max(ctx.measureText(place).width, subW);
+    const bh = s * 1.15 + s2 * 1.5 + pad * 0.9;
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(x, y - bh, tw + pad * 1.6, bh, 3);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(place, x + pad * 0.8, y - bh + s * 1.05);
+    ctx.fillStyle = '#ffc46b';
+    ctx.font = `${s2}px system-ui, sans-serif`;
+    ctx.fillText(sub, x + pad * 0.8, y - bh * 0.18);
+  }
   ctx.restore();
 }
 
@@ -297,22 +523,14 @@ function drawOverArtTitle(ctx, band, state, grade, W, H) {
   ctx.fillStyle = scrim;
   ctx.fillRect(x, y - h * 0.4, w, h * 1.4);
   const cx = x + w / 2;
+  if (state.quote && state.quote.trim()) {
+    drawPressStrip(ctx, cx, y + h * 0.08, h * 0.085, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
+  }
   drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.46, h * 0.5, w * 0.88);
   if (state.subtitle.trim()) {
     drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.72, h * 0.16, w * 0.7);
   }
-  if (state.quote.trim()) {
-    let qs = Math.max(11, h * 0.07);
-    ctx.font = `${qs}px system-ui, sans-serif`;
-    while (qs > 8 && ctx.measureText(state.quote.trim().toUpperCase()).width > w * 0.55) {
-      qs -= 1;
-      ctx.font = `${qs}px system-ui, sans-serif`;
-    }
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8ddf7';
-    ctx.fillText(state.quote.trim().toUpperCase(), cx, y + h * 0.9);
-  }
-  if (state.stars > 0) drawStars(ctx, x + w * 0.06, y + h * 0.86, h * 0.09, state.stars);
+  drawFooterStrip(ctx, x, y + h * 0.8, w, h * 0.2, state, W, H);
   ctx.restore();
 }
 
@@ -331,39 +549,12 @@ function drawKeyArtTitle(ctx, band, state, grade, W, H) {
   ctx.fillRect(x, y + h - Math.max(3, H * 0.004), w, Math.max(3, H * 0.004));
   drawHalftone(ctx, x, y, w, h, '#ff2e88');
   const cx = x + w / 2;
-  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.52, h * 0.46, state.badge ? w * 0.66 : w * 0.88);
+  if (state.quote && state.quote.trim()) {
+    drawPressStrip(ctx, cx, y + h * 0.12, h * 0.09, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
+  }
+  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.52, h * 0.46, w * 0.88);
   if (state.subtitle.trim()) {
     drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.8, h * 0.15, w * 0.7);
   }
-  if (state.stars > 0) drawStars(ctx, x + w * 0.06, y + h * 0.9, h * 0.085, state.stars);
-  if (state.badge) drawBadge(ctx, x + w - w * 0.16, y + h * 0.08, w * 0.13, h * 0.28, 'PALM STATE');
-  ctx.restore();
-}
-
-function drawStars(ctx, x, y, size, filled) {
-  ctx.save();
-  ctx.font = `${size}px system-ui, sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#ffc46b';
-  ctx.fillText('★'.repeat(filled) + '☆'.repeat(Math.max(0, 5 - filled)), x, y);
-  ctx.font = `${size * 0.55}px system-ui, sans-serif`;
-  ctx.fillStyle = '#cfc4e0';
-  ctx.fillText('HEAT', x, y + size * 0.95);
-  ctx.restore();
-}
-
-function drawBadge(ctx, x, y, w, h, text) {
-  ctx.save();
-  ctx.translate(x + w / 2, y + h / 2);
-  ctx.rotate(-0.14);
-  ctx.fillStyle = '#ff2e88';
-  const bw = w; const bh = h * 0.52;
-  ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
-  ctx.fillStyle = '#fff';
-  ctx.font = `700 ${bh * 0.42}px system-ui, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 0, 1);
   ctx.restore();
 }
