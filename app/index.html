@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice Heat Cover Studio</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">VICE HEAT</span> Cover Studio</div>
+  <div class="top-actions">
+    <button id="undoBtn" type="button" title="Undo (Ctrl+Z)">&#8618; Undo</button>
+    <button id="redoBtn" type="button" title="Redo (Ctrl+Shift+Z)">&#8620; Redo</button>
+    <button id="surpriseBtn" type="button" class="accent">Surprise me</button>
+  </div>
+</header>
+<main class="app">
+  <section class="controls" aria-label="Editor controls">
+    <div class="group">
+      <h2>Layout</h2>
+      <div id="layoutRow" class="chips"></div>
+    </div>
+    <div class="group">
+      <h2>Vice grade</h2>
+      <div id="gradeRow" class="chips"></div>
+    </div>
+    <div class="group">
+      <h2>Lettering</h2>
+      <label>Title <input id="titleInput" type="text" maxlength="24" value="VICE HEAT"></label>
+      <label>Subtitle <input id="subtitleInput" type="text" maxlength="40" value="Neon Shore Nights"></label>
+      <label>Quote <input id="quoteInput" type="text" maxlength="60" value="One last job under the palms."></label>
+    </div>
+    <div class="group">
+      <h2>Photos</h2>
+      <div id="library" class="library"></div>
+      <label class="upload">Upload your photo <input id="uploadInput" type="file" accept="image/*" multiple></label>
+      <p class="hint">Click a panel in the preview, then a photo to place it. Drag a panel to move its photo.</p>
+      <div class="panel-tools">
+        <label>Zoom <input id="zoomRange" type="range" min="1" max="2.5" step="0.01" value="1"></label>
+        <div class="row">
+          <button id="fitBtn" type="button">Fit photo</button>
+          <button id="fillAllBtn" type="button">Fill all panels</button>
+        </div>
+      </div>
+      <p id="panelLabel" class="hint">Panel 1 selected</p>
+    </div>
+    <div class="group">
+      <h2>Finish</h2>
+      <div class="toggles">
+        <label><input id="toggleGrain" type="checkbox" checked> Film grain</label>
+        <label><input id="toggleVignette" type="checkbox" checked> Vignette</label>
+        <label><input id="togglePalms" type="checkbox" checked> Palm band</label>
+        <label><input id="toggleBadge" type="checkbox" checked> Badge ribbon</label>
+      </div>
+      <label>Heat <input id="starsRange" type="range" min="0" max="5" step="1" value="4"></label>
+    </div>
+    <div class="group">
+      <h2>Export PNG</h2>
+      <div id="sizeRow" class="chips"></div>
+      <div class="row">
+        <button id="exportBtn" type="button" class="accent">Export PNG</button>
+        <button id="exportAllBtn" type="button">Export all 3 sizes</button>
+      </div>
+      <p id="status" role="status"></p>
+    </div>
+  </section>
+  <section class="stage">
+    <canvas id="preview" width="1080" height="1080" aria-label="Cover preview"></canvas>
+    <p class="stage-hint">Click a panel to select it &middot; drag to move its photo &middot; scroll to zoom</p>
+  </section>
+</main>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
