@@ -208,7 +208,7 @@ export const LAYOUTS = [
 export const TITLES = [
   'NEON SHORE', 'NIGHT SHIFT', 'PIER PRESSURE', 'BOULEVARD QUEEN', 'SUNSET HEIST',
   'VICE HEAT', 'GOLDEN HOUR', 'PALM SHADOWS', 'HEATWAVE NIGHTS', 'DOWNTOWN VICE',
-  'LAST JOB', 'OCEAN DRIVE', 'SUNSET STATE', 'COASTLINE NIGHTS', 'VICE HORIZON',
+  'LAST JOB', 'OCEAN DRIVE', 'COASTAL HEAT', 'COASTLINE NIGHTS', 'VICE HORIZON',
 ];
 export const SUBTITLES = [
   'Neon Shore Nights', 'One last job under the palms', 'Golden hour getaway',
@@ -250,7 +250,7 @@ export function defaultState() {
     layout: 'keycast',
     grade: 'punch',
     size: 'square',
-    title: 'SUNSET STATE',
+    title: 'VICE HEAT',
     subtitle: 'Neon Tide',
     logline: 'SIX NIGHTS. ONE COAST. NO WAY OUT.',
     quote: 'PURE SUNSET CHAOS',
