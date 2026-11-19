@@ -12,6 +12,7 @@ export async function runShot(shot, query, api) {
   state.grade = pick('grade', state.grade);
   state.title = pick('title', state.title);
   state.subtitle = pick('subtitle', state.subtitle);
+  state.logline = pick('logline', state.logline);
   state.quote = pick('quote', state.quote);
   state.pressSource = pick('source', state.pressSource);
   state.tagline = pick('tagline', state.tagline);

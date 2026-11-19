@@ -126,6 +126,7 @@ function buildLibrary() {
 function syncInputs() {
   document.getElementById('titleInput').value = state.title;
   document.getElementById('subtitleInput').value = state.subtitle;
+  document.getElementById('loglineInput').value = state.logline;
   document.getElementById('quoteInput').value = state.quote;
   document.getElementById('sourceInput').value = state.pressSource;
   document.getElementById('taglineInput').value = state.tagline;
@@ -177,6 +178,11 @@ document.getElementById('subtitleInput').addEventListener('input', (e) => {
   redraw();
 });
 document.getElementById('subtitleInput').addEventListener('change', commit);
+document.getElementById('loglineInput').addEventListener('input', (e) => {
+  state.logline = e.target.value;
+  redraw();
+});
+document.getElementById('loglineInput').addEventListener('change', commit);
 document.getElementById('quoteInput').addEventListener('input', (e) => {
   state.quote = e.target.value;
   redraw();

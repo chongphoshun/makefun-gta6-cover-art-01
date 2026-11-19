@@ -55,8 +55,8 @@ export const GRADES = [
   {
     id: 'punch', name: 'Sunset Punch',
     swatch: 'linear-gradient(135deg,#ff5e00,#ff2e88)',
-    wash: 'rgba(255,94,0,0.26)', sky: ['rgba(255,120,40,0.6)', 'rgba(255,120,40,0)'],
-    ground: ['rgba(255,46,136,0)', 'rgba(255,46,136,0.6)'],
+    wash: 'rgba(255,94,0,0.30)', sky: ['rgba(255,120,40,0.6)', 'rgba(255,120,40,0)'],
+    ground: ['rgba(255,46,136,0)', 'rgba(255,46,136,0.65)'],
     deep: 'rgba(64,8,48,0.22)', glow: 'rgba(255,190,90,0.2)', ink: '#2a0a2e',
     filter: 'contrast(1.1) saturate(1.35)',
   },
@@ -182,6 +182,27 @@ export const LAYOUTS = [
     },
     title: (W, H) => titleBand(W, H),
   },
+  {
+    // The default key-art composition: one dominant hero on the left, six
+    // supporting panels in a 2x3 grid on the right, and the title printed
+    // OVER the art's lower third (scrim), the way #1/#3 read. Seven
+    // distinct photos, no repeats, one focal flow: hero -> grid -> title.
+    id: 'keycast', name: 'Key Art Cast', panels: 7,
+    rects(W, H) {
+      const g = Math.min(W, H) * GAP;
+      const artH = H * 0.72;
+      const heroW = W * 0.52 - g / 2;
+      const rx = heroW + g;
+      const rw = W - heroW - g;
+      const cw = (rw - g) / 2; const ch = (artH - 2 * g) / 3;
+      const out = [{ x: 0, y: 0, w: heroW, h: artH, rot: 0 }];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
+        out.push({ x: rx + c * (cw + g), y: r * (ch + g), w: cw, h: ch, rot: 0 });
+      }
+      return out;
+    },
+    title: (W, H) => ({ x: 0, y: H * 0.66, w: W, h: H * 0.34, overArt: true }),
+  },
 ];
 
 export const TITLES = [
@@ -198,19 +219,24 @@ export const SUBTITLES = [
 
 // Every library photo carries its own scene caption (place + time + flavor
 // line) and a character label, the way GTA key art names each panel.
+// Seven distinct photos, seven distinct beats: no photo repeats, no beat
+// repeats. Each beat is one loaded line with real narrative tension.
 export const LIBRARY = [
-  { name: 'Boulevard', src: 'samples/boulevard.jpg', place: 'OCEAN DRIVE', time: '6:42 PM', flavor: 'LOOKING FOR TROUBLE', character: 'THE DRIVER' },
-  { name: 'Rooftop', src: 'samples/rooftop.jpg', place: 'SUNSET HEIGHTS', time: '8:30 PM', flavor: 'BIG MONEY', character: 'THE CLOSER' },
-  { name: 'Neon Street', src: 'samples/neon.jpg', place: 'INTERSTATE 6', time: '11:58 PM', flavor: 'FULL THROTTLE', character: 'THE FIXER' },
-  { name: 'Pier', src: 'samples/pier.jpg', place: 'PIER 26', time: '5:30 AM', flavor: 'GONE FISHING', character: 'THE ANGLER' },
+  { name: 'Boulevard', src: 'samples/boulevard.jpg', place: 'OCEAN DRIVE', time: '6:42 PM', flavor: 'SHE NEVER LOOKED BACK', character: 'THE DRIVER' },
+  { name: 'Rooftop', src: 'samples/rooftop.jpg', place: 'SUNSET HEIGHTS', time: '8:30 PM', flavor: 'THE DEAL IS DONE', character: 'THE CLOSER' },
+  { name: 'Neon Street', src: 'samples/neon.jpg', place: 'INTERSTATE 6', time: '11:58 PM', flavor: 'THEY LAUGHED TOO LOUD', character: 'THE FIXER' },
+  { name: 'Pier', src: 'samples/pier.jpg', place: 'PIER 26', time: '5:30 AM', flavor: 'THE CATCH WAS NEVER FISH', character: 'THE ANGLER' },
+  { name: 'Coastal Road', src: 'samples/coastal.jpg', place: 'CORAL CAUSEWAY', time: '7:15 PM', flavor: 'NO TURNING BACK', character: 'THE RUNNER' },
+  { name: 'Gas Station', src: 'samples/gasstation.jpg', place: 'PALM BOULEVARD', time: '9:15 PM', flavor: 'HE PAID IN CASH', character: 'THE LOOKOUT' },
+  { name: 'Boat', src: 'samples/boat.jpg', place: 'MARINA DEL SOL', time: '7:48 PM', flavor: 'LAST BOAT OUT', character: 'THE WITNESS' },
 ];
 
 // Captions for uploaded photos, cycled in order.
 export const FALLBACK_CAPTIONS = [
-  { place: 'MARINA DEL SOL', time: '7:48 PM', flavor: 'NO WITNESSES', character: 'THE WITNESS' },
-  { place: 'PALM BOULEVARD', time: '9:15 PM', flavor: 'LIGHTS OUT', character: 'THE LOOKOUT' },
-  { place: 'TOWER 2', time: '6:10 PM', flavor: 'LAST SWIM', character: 'THE LIFEGUARD' },
-  { place: 'CORAL CAUSEWAY', time: '7:15 PM', flavor: 'GOLDEN HOUR', character: 'THE RUNNER' },
+  { place: 'TOWER 2', time: '6:10 PM', flavor: 'THE TIDE TOOK THE KEYS', character: 'THE LIFEGUARD' },
+  { place: 'VICE PORT', time: '2:04 AM', flavor: 'THE CRATE WAS EMPTY', character: 'THE DOCKER' },
+  { place: 'SUNSET STRIP', time: '10:47 PM', flavor: 'THE LIGHTS NEVER CAME ON', character: 'THE DEALER' },
+  { place: 'BAYFRONT', time: '4:12 AM', flavor: 'THE MONEY WAS ALREADY GONE', character: 'THE MULE' },
 ];
 
 export const CAPTION_MODES = [
@@ -221,11 +247,12 @@ export const CAPTION_MODES = [
 
 export function defaultState() {
   return {
-    layout: 'cast',
-    grade: 'sunset',
+    layout: 'keycast',
+    grade: 'punch',
     size: 'square',
     title: 'SUNSET STATE',
     subtitle: 'Neon Tide',
+    logline: 'SIX NIGHTS. ONE COAST. NO WAY OUT.',
     quote: 'PURE SUNSET CHAOS',
     pressSource: 'VICE DAILY',
     tagline: 'ONE COAST · NO RULES · COMING SOON',
@@ -244,8 +271,24 @@ export function defaultState() {
     stars: 5,
     selected: 0,
     photos: LIBRARY.map((p) => ({ ...p, img: null, objectUrl: null })),
-    // Nine panel slots; each layout uses the first N. photo = index into photos.
-    panels: Array.from({ length: 9 }, (_, i) => ({ photo: i % 4, zoom: 1, ox: 0, oy: 0 })),
+    // Nine panel slots; each layout uses the first N. The first seven are
+    // the seven distinct library photos, in story order. Slots 8-9 repeat
+    // photos 0-1 only for the nine-panel grid, reframed as tight crops so
+    // no two panels on a cover ever read as the same shot. The hero slot
+    // pans the portrait Boulevard photo up (oy +0.36) so the driver's face
+    // stays in frame even in wide viewports; at square export the pan is
+    // clamped to almost nothing and the face still shows.
+    panels: [
+      { photo: 0, zoom: 1, ox: 0, oy: 0.36 },
+      { photo: 1, zoom: 1, ox: 0, oy: 0 },
+      { photo: 2, zoom: 1, ox: 0, oy: 0 },
+      { photo: 3, zoom: 1, ox: 0, oy: 0.25 },
+      { photo: 4, zoom: 1, ox: 0, oy: 0 },
+      { photo: 5, zoom: 1, ox: 0, oy: 0 },
+      { photo: 6, zoom: 1, ox: 0, oy: 0 },
+      { photo: 0, zoom: 1.7, ox: 0.08, oy: -0.06 },
+      { photo: 1, zoom: 1.6, ox: -0.1, oy: 0.04 },
+    ],
   };
 }
 

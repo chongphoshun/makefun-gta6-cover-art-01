@@ -41,12 +41,18 @@ export function drawCover(canvas, state, opts = {}) {
   else if (title.overArt) drawOverArtTitle(ctx, title, state, grade, W, H);
   else drawTitleBand(ctx, title, state, grade, W, H);
 
-  // Poster furniture on top of everything: starburst seal in the art's
-  // top-right corner (clear of captions, press strip and title), VOL pill
-  // in the art's top-left corner.
+  // Poster furniture on top of everything: starburst seal and VOL pill.
+  // On key-art layouts the seal stamps the title zone's right edge, clear
+  // of every face; on band layouts it sits on the art's bottom-right
+  // corner, just above the title band (a supporting panel, never a face).
+  // Kept small so the art stays the hero.
   if (state.furniture) {
-    if (state.badge) drawSeal(ctx, W * 0.90, H * 0.09, Math.min(W, H) * 0.08, 'EST.', '2026');
-    drawVolPill(ctx, W * 0.022, H * 0.018, 'VOL. 06', Math.max(14, W * 0.018));
+    if (state.badge) {
+      const r = Math.min(W, H) * 0.058;
+      if (title.overArt) drawSeal(ctx, W * 0.94, title.y + title.h * 0.42, r, 'EST.', '2026');
+      else drawSeal(ctx, W * 0.94, title.y - r * 0.9, r, 'EST.', '2026');
+    }
+    drawVolPill(ctx, W * 0.022, H * 0.018, 'VOL. 06', Math.max(12, W * 0.015));
   }
 
   // Selected-panel outline (editor only).
@@ -158,11 +164,18 @@ function drawPanel(ctx, rect, state, grade, W, H, artBottom) {
   });
 
   // Scene caption / character label, clipped to the panel shape.
+  // `lift` keeps the chip readable: above the palm band on bottom-row
+  // panels, and above the title scrim when the panel runs under it
+  // (key-art layouts, where the title prints over the art).
   if (state.captions && state.captions !== 'off') {
     frame((r) => {
       panelPath(ctx, r);
       ctx.clip();
-      const lift = state.palms && Math.abs((r.y + r.h) - artBottom) < 2 ? r.h * 0.22 + 8 : 0;
+      const atBottom = Math.abs((r.y + r.h) - artBottom) < 2;
+      const underTitle = (r.y + r.h) > artBottom + 1;
+      const lift = underTitle
+        ? (r.y + r.h - artBottom) + 10
+        : (atBottom && state.palms ? r.h * 0.22 + 8 : 0);
       drawCaptionChip(ctx, r, photo, state.captions, lift);
     });
   }
@@ -245,32 +258,66 @@ function applyGrade(ctx, rect, grade, state = {}) {
   ctx.restore();
 }
 
-/** 3D extruded title: dark layers offset down-right, gradient face on top. */
+/** 3D extruded title: dark layers offset down-right, gradient face on top.
+ *  Letters are drawn one by one with a fixed tracking (0.03em), the way a
+ *  typeset poster spaces its display face; the face gradient runs
+ *  cream -> gold -> orange -> hot pink, like the top entries' key art. */
 function drawTitle3D(ctx, text, cx, baseline, size, maxW) {
+  const tracking = 0.03; // em
   let s = size;
-  ctx.font = `${s}px Anton, sans-serif`;
-  while (ctx.measureText(text).width > maxW && s > 12) {
-    s -= 2;
-    ctx.font = `${s}px Anton, sans-serif`;
+  const measure = (fontSize) => {
+    ctx.font = `${fontSize}px Anton, sans-serif`;
+    let w = 0;
+    for (const ch of text) w += ctx.measureText(ch).width + fontSize * tracking;
+    return w - fontSize * tracking;
+  };
+  while (measure(s) > maxW && s > 12) s -= 2;
+  const total = measure(s);
+  const xs = [];
+  let x = cx - total / 2;
+  for (const ch of text) {
+    xs.push(x);
+    x += ctx.measureText(ch).width + s * tracking;
   }
-  ctx.textAlign = 'center';
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  const step = s * 0.045;
-  const shades = ['#16042c', '#3d0a4d', '#6d1160'];
+  const step = s * 0.05;
+  const shades = ['#1a0530', '#4d0a52', '#8a1568'];
   shades.forEach((c, i) => {
     ctx.fillStyle = c;
-    ctx.fillText(text, cx + step * (3 - i), baseline + step * (3 - i));
+    for (let j = 0; j < text.length; j++) {
+      ctx.fillText(text[j], xs[j] + step * (3 - i), baseline + step * (3 - i));
+    }
   });
   const face = ctx.createLinearGradient(0, baseline - s, 0, baseline);
-  face.addColorStop(0, '#ffffff');
-  face.addColorStop(0.55, '#ffd27a');
+  face.addColorStop(0, '#fffbe8');
+  face.addColorStop(0.45, '#ffd27a');
+  face.addColorStop(0.8, '#ff7a1a');
   face.addColorStop(1, '#ff2e88');
   ctx.fillStyle = face;
-  ctx.fillText(text, cx, baseline);
-  ctx.lineWidth = Math.max(1.5, s * 0.02);
-  ctx.strokeStyle = 'rgba(20,5,40,0.85)';
-  ctx.strokeText(text, cx, baseline);
+  for (let j = 0; j < text.length; j++) ctx.fillText(text[j], xs[j], baseline);
+  ctx.lineWidth = Math.max(1.5, s * 0.025);
+  ctx.strokeStyle = 'rgba(20,5,40,0.9)';
+  for (let j = 0; j < text.length; j++) ctx.strokeText(text[j], xs[j], baseline);
   return s;
+}
+
+/** Small tracked caps line (logline): centered, letter-spaced, one line. */
+function drawTrackedLine(ctx, text, cx, y, size, trackingEm, color) {
+  const tracking = size * trackingEm;
+  ctx.font = `700 ${size}px system-ui, sans-serif`;
+  let w = 0;
+  for (const ch of text) w += ctx.measureText(ch).width + tracking;
+  w -= tracking;
+  let x = cx - w / 2;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  for (const ch of text) {
+    ctx.fillText(ch, x, y);
+    x += ctx.measureText(ch).width + tracking;
+  }
+  return w;
 }
 
 function drawSubtitle(ctx, text, cx, y, size, maxW) {
@@ -459,61 +506,65 @@ function drawVolPill(ctx, x, y, text, size) {
 }
 
 /** One panel's caption chip: scene (place + time · flavor) or character label.
+ *  Slim and tight on purpose — a printed poster caption, not a UI label:
+ *  small bold place, smaller amber beat line, minimal padding, no slab.
  *  `lift` raises the chip above the palm band on bottom-row panels. */
 function drawCaptionChip(ctx, rect, photo, mode, lift = 0) {
   if (!photo) return;
-  const pad = Math.max(8, rect.w * 0.02);
+  const pad = Math.max(7, rect.w * 0.016);
   const x = rect.x + pad;
   const y = rect.y + rect.h - pad - lift;
   ctx.save();
   ctx.textBaseline = 'alphabetic';
   if (mode === 'character' && photo.character) {
     const label = photo.character;
-    let s = Math.max(11, rect.w * 0.055);
+    let s = Math.max(10, rect.w * 0.045);
     ctx.font = `700 ${s}px system-ui, sans-serif`;
-    while (s > 9 && ctx.measureText(label).width > rect.w * 0.62) {
+    while (s > 9 && ctx.measureText(label).width > rect.w * 0.6) {
       s -= 1;
       ctx.font = `700 ${s}px system-ui, sans-serif`;
     }
     const tw = ctx.measureText(label).width;
-    const bh = s * 1.9;
-    ctx.fillStyle = 'rgba(10, 4, 24, 0.88)';
+    const bh = s * 1.7;
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.85)';
     ctx.beginPath();
-    ctx.roundRect(x, y - bh, tw + pad * 1.6, bh, 3);
+    ctx.roundRect(x, y - bh, tw + pad * 1.4, bh, 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(label, x + pad * 0.8, y - bh * 0.32);
+    ctx.fillText(label, x + pad * 0.7, y - bh * 0.32);
   } else if (photo.place) {
     const place = photo.place;
     const sub = [photo.time, photo.flavor].filter(Boolean).join(' · ');
-    let s = Math.max(11, rect.w * 0.052);
+    let s = Math.max(10, rect.w * 0.042);
     ctx.font = `700 ${s}px system-ui, sans-serif`;
-    while (s > 9 && ctx.measureText(place).width > rect.w * 0.8) {
+    while (s > 9 && ctx.measureText(place).width > rect.w * 0.78) {
       s -= 1;
       ctx.font = `700 ${s}px system-ui, sans-serif`;
     }
-    const s2 = Math.max(8, s * 0.58);
+    const s2 = Math.max(7, s * 0.58);
     ctx.font = `${s2}px system-ui, sans-serif`;
     const subW = ctx.measureText(sub).width;
     ctx.font = `700 ${s}px system-ui, sans-serif`;
     const tw = Math.max(ctx.measureText(place).width, subW);
-    const bh = s * 1.15 + s2 * 1.5 + pad * 0.9;
-    ctx.fillStyle = 'rgba(10, 4, 24, 0.88)';
+    const bh = s * 1.05 + s2 * 1.35 + pad * 0.7;
+    ctx.fillStyle = 'rgba(10, 4, 24, 0.85)';
     ctx.beginPath();
-    ctx.roundRect(x, y - bh, tw + pad * 1.6, bh, 3);
+    ctx.roundRect(x, y - bh, tw + pad * 1.4, bh, 2);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(place, x + pad * 0.8, y - bh + s * 1.05);
+    ctx.fillText(place, x + pad * 0.7, y - bh + s * 1.0);
     ctx.fillStyle = '#ffc46b';
     ctx.font = `${s2}px system-ui, sans-serif`;
-    ctx.fillText(sub, x + pad * 0.8, y - bh * 0.18);
+    ctx.fillText(sub, x + pad * 0.7, y - bh * 0.16);
   }
   ctx.restore();
 }
 
-/** Title drawn over the art (full-bleed): scrim, then the same lettering. */
+/** Title drawn over the art (full-bleed / key-art cast): scrim, then the
+ *  same lettering — press strip, tracked title, script subtitle, logline,
+ *  then the footer strip. */
 function drawOverArtTitle(ctx, band, state, grade, W, H) {
   const { x, y, w, h } = band;
   ctx.save();
@@ -524,13 +575,16 @@ function drawOverArtTitle(ctx, band, state, grade, W, H) {
   ctx.fillRect(x, y - h * 0.4, w, h * 1.4);
   const cx = x + w / 2;
   if (state.quote && state.quote.trim()) {
-    drawPressStrip(ctx, cx, y + h * 0.08, h * 0.085, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
+    drawPressStrip(ctx, cx, y + h * 0.04, h * 0.06, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
   }
-  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.46, h * 0.5, w * 0.88);
+  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.48, h * 0.38, w * 0.88);
   if (state.subtitle.trim()) {
-    drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.72, h * 0.16, w * 0.7);
+    drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.64, h * 0.12, w * 0.7);
   }
-  drawFooterStrip(ctx, x, y + h * 0.8, w, h * 0.2, state, W, H);
+  if (state.logline && state.logline.trim()) {
+    drawTrackedLine(ctx, state.logline.trim().toUpperCase(), cx, y + h * 0.76, h * 0.055, 0.28, '#ffe9a8');
+  }
+  drawFooterStrip(ctx, x, y + h * 0.82, w, h * 0.18, state, W, H);
   ctx.restore();
 }
 
@@ -550,11 +604,14 @@ function drawKeyArtTitle(ctx, band, state, grade, W, H) {
   drawHalftone(ctx, x, y, w, h, '#ff2e88');
   const cx = x + w / 2;
   if (state.quote && state.quote.trim()) {
-    drawPressStrip(ctx, cx, y + h * 0.12, h * 0.09, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
+    drawPressStrip(ctx, cx, y + h * 0.04, h * 0.06, state.quote.trim(), state.pressSource || '', w * 0.92, state.stars);
   }
-  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.52, h * 0.46, w * 0.88);
+  drawTitle3D(ctx, state.title.trim().toUpperCase() || 'VICE HEAT', cx, y + h * 0.48, h * 0.38, w * 0.88);
   if (state.subtitle.trim()) {
-    drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.8, h * 0.15, w * 0.7);
+    drawSubtitle(ctx, state.subtitle.trim(), cx, y + h * 0.64, h * 0.12, w * 0.7);
+  }
+  if (state.logline && state.logline.trim()) {
+    drawTrackedLine(ctx, state.logline.trim().toUpperCase(), cx, y + h * 0.78, h * 0.055, 0.28, '#ffe9a8');
   }
   ctx.restore();
 }
